@@ -300,6 +300,29 @@ fixedpt_tan(fixedpt A)
 }
 
 
+/* Returns the arctan2 of y/x, accuraxy is +- .07 rad */
+static inline fixedpt
+fixedpt_arctan2(fixedpt y, fixedpt x)
+{
+	fixedpt fy = fixedpt_abs(y);
+	fixedpt r, p;
+	if (x + fy == 0) {
+		p = 0;
+	} else if (x >= 0) {
+		r = fixedpt_div(x - fy, fy + x);
+		p = FIXEDPT_ONE - r;
+	} else {
+		r = fixedpt_div(x + fy, fy - x);
+		p = fixedpt_fromint(3) - r;
+	}
+	p = fixedpt_mul(fixedpt_div(FIXEDPT_PI, fixedpt_fromint(4)), p);
+	if (y >= 0)
+		return p; /* 1, 2 */
+	else
+		return -p; /* 3, 4 */
+}
+
+
 /* Returns the value exp(x), i.e. e^x of the given fixedpt number. */
 static inline fixedpt
 fixedpt_exp(fixedpt fp)
