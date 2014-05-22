@@ -6,6 +6,10 @@
 #include <uart.h>
 #include <generated/csr.h>
 #include <console.h>
+
+#define FIXEDPT_WBITS 24
+#include "fixedptc.h"
+
 #include "ventilator.h"
 
 #if 1
@@ -535,7 +539,8 @@ static void photon_phase(char *f)
 #define PP_T_SCALE 10
 #define PP_N_GATE 10
 	char *c;
-	unsigned int n[20];
+	unsigned int n[20], m;
+	fixedpt x, y, r, p;
 	unsigned int t_rf=0, t_pmt, i, f2;
 	ventilator_event_t ev;
 	const ventilator_event_t ev_tag[9] = {
@@ -573,34 +578,52 @@ static void photon_phase(char *f)
 			continue;
 		if (ev.data & PP_GATE) {
 			if ((ev.addr & ~0xf0) == VENTILATOR_GPIO_IN_FALL) {
-				/* puts("\\"); */
+				puts("\\");
 				ventilator_stop();
 				ventilator_push_many(ev_tag, len(ev_tag), 0);
 				ventilator_start();
 				i++;
 				if (i == PP_N_GATE) {
+					x = fixedpt_rconst(0.);
+					y = fixedpt_rconst(0.);
+					m = 0;
 					for (i=0; i<len(n); i++) {
 						printf("%03d ", n[i]);
+						p = fixedpt_div(fixedpt_mul(FIXEDPT_TWO_PI,
+									fixedpt_fromint(i<<PP_T_SCALE)), fixedpt_fromint(f2));
+						x += fixedpt_mul(fixedpt_fromint(n[i]), fixedpt_cos(p));
+						y += fixedpt_mul(fixedpt_fromint(n[i]), fixedpt_sin(p));
+						m += n[i];
 						n[i] = 0;
 					}
 					i = 0;
 					puts("");
+					printf("m=%d  x,y=%s,", m, fixedpt_cstr(x, -1));
+					printf("%s", fixedpt_cstr(y, -1));
+					if (m > 0)
+						r = fixedpt_div(fixedpt_sqrt(fixedpt_mul(x, x) + fixedpt_mul(y, y)),
+								fixedpt_fromint(m));
+					else
+						r = 0;
+					p = fixedpt_arctan2(y, x);
+					printf("  r,p=%s,", fixedpt_cstr(r, -1));
+					printf("%s\n", fixedpt_cstr(p, -1));
 				}
 			} else {
-				/* putsnonl("/"); */
+				putsnonl("/");
 			}
 		}
 		if (ev.data & PP_RF) {
-			/* putsnonl("r"); */
+			putsnonl("r");
 			t_rf = (ev.time << 3) + ((ev.addr & 0x70) >> 4);
-			//printf("%08d\n", t_rf);
+			printf("%08d\n", t_rf);
 		}
 		if (ev.data & PP_PMT) {
-			/* putsnonl("p"); */
+			putsnonl("p");
 			t_pmt = ((ev.time << 3) + ((ev.addr & 0x70) >> 4));
-			/* printf("%08d ", t_pmt); */
+			printf("%08d ", t_pmt);
 			t_pmt = (((t_pmt - t_rf)<<PP_T_SCALE) % f2)>>PP_T_SCALE;
-			/* printf("%08d\n", t_pmt); */
+			printf("%08d\n", t_pmt);
 			n[min(t_pmt, len(n) - 1)]++;
 		}
 	}
