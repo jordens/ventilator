@@ -196,29 +196,29 @@ static void pulses(void)
 
 static int tl1(int buf, int mode)
 {
+#define TL_PIN 0x01
 	uint32_t t = 0, temp;
 	ventilator_event_t eva;
 	const ventilator_event_t ev_start[7] = {
 		{0, VENTILATOR_CTRL_CLEAR_FORCE, 0},
-		{1, VENTILATOR_GPIO_O, TTL_OE | 0x00},
-		{2, VENTILATOR_GPIO_OE, TTL_OE | 0x10},
-		{3, VENTILATOR_GPIO_SENSE_RISE, 0x10},
-		{4, VENTILATOR_GPIO_SENSE_FALL, 0x00},
-		{0x100, VENTILATOR_GPIO_O, TTL_OE | 0x10},
-		{0x101, VENTILATOR_GPIO_O, TTL_OE | 0x00}
+		{1, VENTILATOR_GPIO_O, 0x00},
+		{2, VENTILATOR_GPIO_OE, TL_PIN},
+		{3, VENTILATOR_GPIO_SENSE_FALL, 0x00},
+		{4, VENTILATOR_GPIO_SENSE_RISE, TL_PIN},
+		{0x200, VENTILATOR_GPIO_O, TL_PIN},
+		{0x201, VENTILATOR_GPIO_O, 0x00}
 	};
 	ventilator_stop();
 	ventilator_push_many(ev_start, len(ev_start), 0);
 	ventilator_out_addr_write(VENTILATOR_GPIO_O);
-	ventilator_out_data_write(TTL_OE | 0x10);
+	ventilator_out_data_write(TL_PIN);
 
-	irq_setie(0);
 	ventilator_start();
 	switch (mode) {
 		case 0:
 			ventilator_pop(&eva, 0);
 			t = eva.time;
-			ventilator_push1(t + buf, VENTILATOR_GPIO_O, TTL_OE | 0x10, 0);
+			ventilator_push1(t + buf, VENTILATOR_GPIO_O, TL_PIN, 0);
 			break;
 		case 1:
 			while (!(ventilator_ev_status_read() & VENTILATOR_EV_IN_READABLE));
@@ -252,7 +252,6 @@ static int tl1(int buf, int mode)
 			break;
 #endif
 	}
-	irq_setie(1);
 
 	do {
 		ventilator_ctrl_update_write(0);
@@ -264,8 +263,8 @@ static int tl1(int buf, int mode)
 
 static void tl(char* mode)
 {
-#define BUF_START 1024
-#define N_ITER 10000
+#define BUF_START 512
+#define N_ITER 1000
 	char *c;
 	int buf = BUF_START;
 	int dbuf = buf;
@@ -283,12 +282,16 @@ static void tl(char* mode)
 
 	while (dbuf > 0) {
 		dt = 0;
+		irq_setie(0);
+		for (i=0; i<10; i++) /* warm up, caching */
+			tl1(buf, mode2);
 		for (i=0; i<N_ITER; i++) {
 			ddt = tl1(buf, mode2);
 			if (ddt < 0)
 				break;
 			dt += ddt;
 		}
+		irq_setie(1);
 		lat = dt - i*buf;
 		printf("buf %d success %d/%d latency %d/%d\n",
 				buf, i, N_ITER, lat, N_ITER);
